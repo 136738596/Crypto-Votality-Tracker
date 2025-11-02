@@ -1,0 +1,5 @@
+{
+  "name": "Crypto Volatility Tracker",
+  "description": "An application that uses AI to identify and display the most volatile cryptocurrencies from major exchanges in near real-time, providing insights into market movements.",
+  "requestFramePermissions": []
+}
