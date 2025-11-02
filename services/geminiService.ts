@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { CoinData } from '../types';
 
 const API_KEY = process.env.API_KEY;
@@ -9,52 +9,18 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-const coinSchema = {
-  type: Type.OBJECT,
-  properties: {
-    name: {
-      type: Type.STRING,
-      description: 'Full name of the cryptocurrency, e.g., "Bitcoin".',
-    },
-    symbol: {
-      type: Type.STRING,
-      description: 'The ticker symbol for the cryptocurrency, e.g., "BTC".',
-    },
-    volatility1hPercentage: {
-      type: Type.NUMBER,
-      description: 'The percentage price change in the last hour, e.g., 5.25 for +5.25% or -3.1 for -3.1%.',
-    },
-    reason: {
-      type: Type.STRING,
-      description: 'A brief, one-sentence explanation for the high volatility.',
-    },
-    currentPrice: {
-      type: Type.NUMBER,
-      description: 'The current market price of the cryptocurrency in USD.',
-    },
-    volume24h: {
-        type: Type.NUMBER,
-        description: 'The trading volume over the last 24 hours in USD.',
-    }
-  },
-  required: ['name', 'symbol', 'volatility1hPercentage', 'reason', 'currentPrice', 'volume24h'],
-};
-
 export const fetchVolatileCoins = async (): Promise<CoinData[]> => {
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `List the top 12 cryptocurrencies on the Binance exchange with the highest price volatility in the last hour. For each coin, provide: its name, symbol, current price in USD, the 1-hour price change percentage, the 24-hour trading volume in USD, and a brief reason for its volatility.`,
+      contents: `Using Google Search to find the latest real-time data, list the top 12 cryptocurrencies on the Binance exchange with the highest price volatility in the last hour. Respond ONLY with a JSON array of objects. Each object must represent a coin and contain these exact keys: "name", "symbol", "currentPrice" (number, in USD), "volatility1hPercentage" (number, e.g., 5.25 for +5.25% or -3.1 for -3.1%), "volume24h" (number, in USD), and "reason" (string, a brief explanation for the volatility). Do not include any text, titles, or markdown formatting before or after the JSON array.`,
       config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: coinSchema,
-        },
+        tools: [{googleSearch: {}}],
       },
     });
 
-    const jsonText = response.text.trim();
+    // Clean the response to ensure it's valid JSON, removing potential markdown fences
+    const jsonText = response.text.trim().replace(/^```json\n/, '').replace(/\n```$/, '');
     const data = JSON.parse(jsonText);
     
     if (!Array.isArray(data)) {
@@ -66,6 +32,10 @@ export const fetchVolatileCoins = async (): Promise<CoinData[]> => {
     return (data as CoinData[]).sort((a, b) => Math.abs(b.volatility1hPercentage) - Math.abs(a.volatility1hPercentage));
   } catch (error) {
     console.error("Error fetching volatile coins:", error);
-    throw new Error("Failed to fetch data from the Gemini API. Please check your API key and network connection.");
+    // Provide a more specific error message if parsing fails
+    if (error instanceof SyntaxError) {
+      throw new Error("Failed to parse the data from the AI. The response was not valid JSON.");
+    }
+    throw new Error("Failed to fetch data from the Gemini API. Please check your network connection.");
   }
 };
